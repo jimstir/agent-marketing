@@ -1,6 +1,6 @@
 "use client";
 import TopBar from "./components/TopBar";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { createWalletClient, custom, parseAbi, publicActions, parseEther } from "viem";
 import { mainnet } from "viem/chains";
@@ -12,9 +12,12 @@ const arcTestnet = {
   nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
   rpcUrls: { default: { http: ['https://rpc.testnet.arc.network'] }, public: { http: ['https://rpc.testnet.arc.network'] } },
 };
-import { createCampaign, updateCampaignAgent, getOrCreateProfile, initAgentAuthorization, finalizeAgentAuthorization } from "./actions/campaigns";
+import { createCampaign, updateCampaignAgent, getOrCreateProfile, initAgentAuthorization, finalizeAgentAuthorization, getAllCampaignsForSelect } from "./actions/campaigns";
 import { createAffiliate } from "./actions/affiliates";
+import { verifyAgentOwnershipFromBigQuery } from "./actions/bigquery";
+import { createNotification } from "./actions/notifications";
 import { getWalletAddress } from "../lib/privy";
+import { useRouter } from "next/navigation";
 
 const IDENTITY_REGISTRY_ADDRESS = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432";
 const ABI = parseAbi([
@@ -25,22 +28,41 @@ const ABI = parseAbi([
 export default function Home() {
   const { user, authenticated, login, getAccessToken } = usePrivy();
   const { wallets } = useWallets();
+  const router = useRouter();
+  
   const [formData, setFormData] = useState({
     name: "",
     rewardAmount: "",
     description: "",
     challengeCriteria: "",
-    walletPolicies: ""
+    walletPolicies: "",
+    durationDays: "7"
   });
   
   const [affiliateData, setAffiliateData] = useState({
     description: "",
-    agentURI: ""
+    tags: "",
+    registryAddress: "",
+    initialCampaignId: ""
   });
   
   const [isDeploying, setIsDeploying] = useState(false);
   const [agentType, setAgentType] = useState("campaign"); // "campaign" or "affiliate"
   const [affiliateRefLink, setAffiliateRefLink] = useState("");
+  const [availableCampaigns, setAvailableCampaigns] = useState([]);
+
+  useEffect(() => {
+    async function loadCampaigns() {
+      const res = await getAllCampaignsForSelect();
+      if (res.success) {
+        setAvailableCampaigns(res.data);
+        if (res.data.length > 0) {
+          setAffiliateData(prev => ({ ...prev, initialCampaignId: res.data[0].id }));
+        }
+      }
+    }
+    loadCampaigns();
+  }, []);
 
   const handleAffiliateSubmit = async (e) => {
     e.preventDefault();
@@ -52,6 +74,18 @@ export default function Home() {
     setIsDeploying(true);
     try {
       const address = getWalletAddress(user, wallets);
+      
+      // Verify ERC-8004 ownership via BigQuery
+      if (!affiliateData.registryAddress) throw new Error("ERC-8004 Registry Address is required.");
+      
+      const bqRes = await verifyAgentOwnershipFromBigQuery(affiliateData.registryAddress, address);
+      if (!bqRes.success) {
+        throw new Error("Failed to verify Ethereum Mainnet ownership. " + bqRes.error);
+      }
+      if (!bqRes.hasAgent) {
+        throw new Error(`Your wallet (${address}) is not the owner of any registered agent on IdentityRegistry ${affiliateData.registryAddress}. You must register on ERC-8004 first.`);
+      }
+
       const profileRes = await getOrCreateProfile(address);
       if (!profileRes.success) throw new Error("Could not find or create profile.");
 
@@ -62,10 +96,14 @@ export default function Home() {
 
       if (!result.success) throw new Error(result.error);
       
-      const link = `${window.location.origin}/?ref=${result.data.referralCode}`;
-      setAffiliateRefLink(link);
-      alert("Affiliate Operator registered successfully!");
-      setAffiliateData({ description: "", agentURI: "" });
+      if (result.data.linkData) {
+        const link = `${window.location.origin}/?ref=${result.data.linkData.referralCode}`;
+        setAffiliateRefLink(link);
+      } else {
+        setAffiliateRefLink("Registration complete (No Initial Campaign Selected)");
+      }
+
+      setAffiliateData({ description: "", tags: "", registryAddress: "", initialCampaignId: availableCampaigns[0]?.id || "" });
     } catch (error) {
       console.error("Affiliate registration failed", error);
       alert("Failed to register affiliate: " + error.message);
@@ -91,8 +129,12 @@ export default function Home() {
       if (!profileRes.success) throw new Error("Could not find or create profile.");
       
       // 2. Create the campaign in the database first so we have an ID for the URI
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + parseInt(formData.durationDays || "7"));
+
       const createRes = await createCampaign({
         ...formData,
+        endDate: endDate,
         managerId: profileRes.data.id
       });
       if (!createRes.success) throw new Error("Could not create campaign.");
@@ -166,6 +208,7 @@ export default function Home() {
       await updateCampaignAgent(campaignId, agentRegistry, agentId);
 
       // 8. Switch to Arc Testnet and Fund Agent
+      let arcTxHash = null;
       const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
       if (!embeddedWallet) {
         console.warn("Could not find agent's embedded wallet. Skipping funding step.");
@@ -177,16 +220,34 @@ export default function Home() {
           transport: custom(provider)
         }).extend(publicActions);
 
-        const txHash = await arcClient.sendTransaction({
+        arcTxHash = await arcClient.sendTransaction({
           to: embeddedWallet.address,
           value: parseEther(formData.rewardAmount.toString() || "0")
         });
         
-        await arcClient.waitForTransactionReceipt({ hash: txHash });
+        await arcClient.waitForTransactionReceipt({ hash: arcTxHash });
       }
 
-      alert(`Campaign deployed successfully! Agent Identity: ${agentRegistry} - ID: ${agentId}`);
-      setFormData({ name: "", rewardAmount: "", description: "", challengeCriteria: "", walletPolicies: "" });
+      // 9. Create Transaction Notification
+      await createNotification({
+        profileId: profileRes.data.id,
+        campaignId: campaignId,
+        type: 'DEPLOYMENT',
+        message: `Campaign '${formData.name}' deployed! Agent Identity: ${agentRegistry} - ID: ${agentId}`,
+        ethTxHash: hash,
+        arcTxHash: arcTxHash
+      });
+
+      // 10. Generate LLM Challenge
+      const llmRes = await generateCampaignChallenge(campaignId);
+      if (!llmRes.success) {
+         console.error("Failed to generate LLM Challenge, but deployment succeeded.");
+      }
+
+      setFormData({ name: "", rewardAmount: "", description: "", challengeCriteria: "", walletPolicies: "", durationDays: "7" });
+      
+      // 10. Redirect to Dashboard
+      router.push('/dashboard?deploySuccess=true');
     } catch (error) {
       console.error("Deployment failed", error);
       alert("Failed to deploy campaign: " + error.message);
@@ -235,6 +296,20 @@ export default function Home() {
                 placeholder="e.g. Summer Bonanza Giveaway"
                 value={formData.name}
                 onChange={e => setFormData({...formData, name: e.target.value})}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="duration">Campaign Duration (Days)</label>
+              <input
+                id="duration"
+                type="number"
+                className="form-input"
+                placeholder="7"
+                min="1"
+                value={formData.durationDays}
+                onChange={e => setFormData({...formData, durationDays: e.target.value})}
                 required
               />
             </div>
@@ -333,18 +408,49 @@ export default function Home() {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="agent-uri">Agent URI</label>
+                  <label htmlFor="affiliate-tags">Audience Tags</label>
                   <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                    Note: Being x402-compatible is recommended but not a hard requirement.
+                    Comma-separated tags (e.g. DeFi, Developers, GenZ). Used by the LLM for Audience Alignment Scoring.
                   </p>
                   <input
-                    id="agent-uri"
-                    type="url"
+                    id="affiliate-tags"
+                    type="text"
                     className="form-input"
-                    placeholder="https://your-agent-domain.com/api"
-                    value={affiliateData.agentURI}
-                    onChange={e => setAffiliateData({...affiliateData, agentURI: e.target.value})}
+                    placeholder="DeFi, Crypto, Builders"
+                    value={affiliateData.tags}
+                    onChange={e => setAffiliateData({...affiliateData, tags: e.target.value})}
                   />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="registry-address">ERC-8004 Registry Address</label>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                    You MUST have an agent registered on Ethereum Mainnet. Provide the IdentityRegistry address.
+                  </p>
+                  <input
+                    id="registry-address"
+                    type="text"
+                    className="form-input"
+                    placeholder="0x8004A169FB4a3325136EB29fA0ceB6D2e539a432"
+                    value={affiliateData.registryAddress}
+                    onChange={e => setAffiliateData({...affiliateData, registryAddress: e.target.value})}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="initial-campaign">Initial Campaign to Join</label>
+                  <select
+                    id="initial-campaign"
+                    className="form-input"
+                    value={affiliateData.initialCampaignId}
+                    onChange={e => setAffiliateData({...affiliateData, initialCampaignId: e.target.value})}
+                    required
+                  >
+                    {availableCampaigns.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <button type="submit" className="btn-submit" disabled={isDeploying}>

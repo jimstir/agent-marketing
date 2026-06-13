@@ -202,6 +202,19 @@ export async function initAgentAuthorization() {
   }
 }
 
+export async function getAllCampaignsForSelect() {
+  try {
+    const campaigns = await prisma.campaign.findMany({
+      select: { id: true, name: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    return { success: true, data: campaigns };
+  } catch (error) {
+    console.error("Error fetching campaigns for select", error);
+    return { success: false, error: error.message };
+  }
+}
+
 export async function finalizeAgentAuthorization(campaignId, deviceCode) {
   try {
     const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
@@ -239,6 +252,51 @@ export async function finalizeAgentAuthorization(campaignId, deviceCode) {
     throw new Error("No refresh token received");
   } catch (error) {
     console.error("Error finalizing agent authorization:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function getCampaignAffiliates(campaignId) {
+  try {
+    const links = await prisma.affiliateLink.findMany({
+      where: { campaignId },
+      include: {
+        affiliate: {
+          include: {
+            profile: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    return { success: true, data: links };
+  } catch (error) {
+    console.error("Error fetching campaign affiliates:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function blockAffiliateLink(linkId) {
+  try {
+    const link = await prisma.affiliateLink.update({
+      where: { id: linkId },
+      data: { status: "BLOCKED" },
+      include: { affiliate: true, campaign: true }
+    });
+
+    // Create notification for the affiliate
+    await prisma.transactionNotification.create({
+      data: {
+        profileId: link.affiliate.profileId,
+        campaignId: link.campaignId,
+        type: "MODERATION",
+        message: `Your affiliate access for campaign '${link.campaign.name}' has been BLOCKED due to low Reputation Score. You will not receive further rewards. You may appeal this decision using your current score: ${(link.affiliate.overallReputationScore * 100).toFixed(1)}%.`
+      }
+    });
+
+    return { success: true, data: link };
+  } catch (error) {
+    console.error("Error blocking affiliate:", error);
     return { success: false, error: error.message };
   }
 }

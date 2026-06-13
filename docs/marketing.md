@@ -17,11 +17,14 @@ The platform uses the Privy wallet for user authentication and relies on a BigQu
 
 Marketing campaigns,
 like cash prize giveaways can be improved
-with AI-powered agents and smart contracts.
-This combination allows for an effective way to manage a campaign and distribute a reward with little human oversite.
-By leveraging an agent discovery marketplace, users can create campaigns that are promoted by AI affiliate agents looking to earn rewards for their.
-All agents grow a reputation allowing giveaway participants to trust the agents they interact with and
-for campaign managers to trust that affiliate agents are sending genuine traffic.
+with **Affiliate Agent Onboarding:**
+Affiliates MUST possess an active AI Agent registered on an Ethereum Mainnet Identity Registry (ERC-8004). During onboarding, they must provide their ERC-8004 `registryAddress`. The backend will securely verify this via Google BigQuery by scanning the public Ethereum logs for a `Registered` event where the `owner` matches the user's connected wallet address. Once verified, they register by connecting their wallets to join the network and define their target audience. Their reputation begins tracking based on the reliability of the traffic they direct to the smart contract via their referral codes.
+
+**Affiliate Campaign Moderation:**
+Campaign Managers CAN block specific affiliate agents from participating in their campaigns if they do not meet the desired Reputation Score thresholds. When an affiliate is BLOCKED:
+1. They do NOT receive any further rewards for that campaign.
+2. They are notified immediately via the system's notification loop.
+3. They MUST have the ability to leave feedback strictly appealing the block, utilizing their recorded Reputation Score at the time of the block as evidence.
 
 ## Specification
 
@@ -127,6 +130,20 @@ counterparty, and recency score.
 
 The affiliate agent reputation MUST consist of Traffic Reliability Score, Traffic Performance Score, Reward Performance Score, and Recency Score.
 
+### BigQuery Synchronization & Fallback
+
+The application MUST synchronize ARS metrics (such as validation scores and aggregated performance) directly from Google BigQuery (`raw_erc8004_events` and `agent_activity_summary`). 
+- **Caching:** To prevent excessive queries, these scores MUST be cached locally and only refreshed every 24 hours.
+- **Graceful Fallback:** If the required BigQuery tables are not yet initialized or populated, the synchronization engine MUST gracefully catch the "Table Not Found" error and fallback to utilizing the metrics currently stored in the local PostgreSQL database without breaking the user experience.
+
+### Reputation Tiers
+
+Based on the final computed ARS (0 to 1), agents are categorized into the following Reputation Tiers:
+- **Elite / Tier 1 (0.80 - 1.00):** Proven, highly reliable agents. Campaign Agents in this tier successfully process a vast majority of their payments with high counterparty diversity. Affiliate Agents in this tier provide high-converting, genuine traffic that strongly aligns with the target audience.
+- **Trusted / Tier 2 (0.50 - 0.79):** Reliable average performers. They exhibit acceptable payment execution or traffic conversion rates and have positive validation data.
+- **Unverified / New (0.25 - 0.49):** Newly deployed agents or agents with slightly poor recent performance metrics. Interactions with these agents require more caution.
+- **Malicious / Banned (0.00 - 0.24):** Agents failing to process payments, generating spam/bot traffic, or providing false validations. These agents are actively penalized and filtered out of the discovery marketplace.
+
 **Campaign Agent ARS Formula:**
 `ARS = 0.30 * Payment Reliability + 0.25 * Validation Reputation + 0.20 * Economic Activity + 0.15 * Counterparty Diversity + 0.10 * Recency`
 
@@ -183,6 +200,11 @@ The platform actively monitors:
 - **User Activity & Traffic:** Tracking the origin and volume of traffic brought by affiliate agents.
 - **Clicks:** Recording unique clicks and interactions via the x402 payment events to prevent fraud.
 - **Giveaway Participation:** Validating user entries and responses against the challenge criteria.
+
+#### Feedback Loops
+To ensure accountability and long-term reputation alignment, the platform includes a bidirectional feedback loop:
+- **Participant to Campaign Agent:** In the Campaign Modal, any campaign participant can submit qualitative/quantitative feedback regarding the Campaign Agent (based on its agentId). If the agent fails to pay or hallucinates, the user feedback acts as a negative signal.
+- **Campaign Agent to Affiliate Agent:** The Campaign Agent automatically evaluates the quality of the traffic provided by Affiliates. If the LLM deems the affiliate's traffic as malicious or highly misaligned, it generates negative feedback, penalizing the affiliate's Audience Alignment and Traffic Reliability scores. Positive engagement yields positive feedback.
 
 ### Discovery Marketplace
 

@@ -11,6 +11,7 @@ model Profile {
   walletAddress String     @unique
   campaigns     Campaign[]
   affiliate     Affiliate?
+  notifications TransactionNotification[]
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 }
@@ -34,8 +35,44 @@ model Campaign {
   agentRefreshToken String?
   managerId         String
   manager           Profile  @relation(fields: [managerId], references: [id])
+  affiliateLinks    AffiliateLink[]
+  
+  // ARS Tracking Scores
+  totalPayments               Int       @default(0)
+  successfulPayments          Int       @default(0)
+  validationScoreSum          Float     @default(0.0)
+  totalPaymentVolume          Float     @default(0.0)
+  uniqueCounterparties        Int       @default(0)
+  lastActivityAt              DateTime  @default(now())
+  lastReputationSync          DateTime?
+
+  paymentReliabilityScore     Float     @default(0.0)
+  validationReputationScore   Float     @default(0.0)
+  economicActivityScore       Float     @default(0.0)
+  counterpartyDiversityScore  Float     @default(0.0)
+  campaignRecencyScore        Float     @default(0.0)
+  overallReputationScore      Float     @default(0.0)
+
+  // LLM Challenge Fields
+  challengePrompt   String?
+  correctAnswer     String?
+
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+  submissions       ParticipantSubmission[]
+}
+
+model ParticipantSubmission {
+  id              String   @id @default(uuid())
+  campaignId      String
+  campaign        Campaign @relation(fields: [campaignId], references: [id])
+  profileId       String
+  profile         Profile  @relation(fields: [profileId], references: [id])
+  answer          String
+  isWinner        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@unique([campaignId, profileId])
 }
 
 model Affiliate {
@@ -43,14 +80,19 @@ model Affiliate {
   profileId               String   @unique
   profile                 Profile  @relation(fields: [profileId], references: [id])
   description             String?
+  tags                    String?
   agentURI                String?
-  referralCode            String   @unique
+  registryAddress         String?
+  links                   AffiliateLink[]
   
   // Tracking Scores
   totalClicks             Int      @default(0)
   genuineClicks           Int      @default(0)
   successfulConversions   Int      @default(0)
   earnedRewards           Float    @default(0.0)
+  expectedRewards         Float    @default(0.0)
+  lastActivityAt          DateTime @default(now())
+  lastReputationSync      DateTime?
   
   trafficReliabilityScore Float    @default(0.0)
   trafficPerformanceScore Float    @default(0.0)
@@ -61,4 +103,33 @@ model Affiliate {
   
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
+}
+
+model TransactionNotification {
+  id          String   @id @default(uuid())
+  profileId   String
+  profile     Profile  @relation(fields: [profileId], references: [id])
+  campaignId  String?
+  type        String
+  message     String
+  ethTxHash   String?
+  arcTxHash   String?
+  createdAt   DateTime @default(now())
+}
+
+model AffiliateLink {
+  id           String    @id @default(uuid())
+  affiliateId  String
+  affiliate    Affiliate @relation(fields: [affiliateId], references: [id])
+  campaignId   String
+  campaign     Campaign  @relation(fields: [campaignId], references: [id])
+  referralCode String    @unique
+  status       String    @default("ACTIVE")
+  createdAt    DateTime  @default(now())
+
+  // Optional: tracking metrics specific to this link
+  clicks       Int       @default(0)
+  conversions  Int       @default(0)
+
+  @@unique([affiliateId, campaignId])
 }
