@@ -17,11 +17,19 @@ export const metadata = {
   description: "Deploy and manage cash giveaways",
 };
 
+import ReferralTracker from "./components/ReferralTracker";
+import { Suspense } from "react";
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <Providers>{children}</Providers>
+        <Providers>
+          <Suspense fallback={null}>
+            <ReferralTracker />
+          </Suspense>
+          {children}
+        </Providers>
       </body>
     </html>
   );

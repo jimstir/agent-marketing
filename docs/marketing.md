@@ -104,8 +104,14 @@ Each profile is identified by the user's connected wallet address.
 - `endDate` (DateTime, Optional): Expiration date of the campaign.
 - `imageUrl` (String, Optional): Display image for the dashboard widget.
 - `shortDescription` (String, Optional): Short hook for the dashboard widget.
+- `description` (String, Optional): Long-form detailed description about the campaign.
+- `walletPolicies` (String, Optional): JSON or text string containing Privy Agent Wallet restrictions.
 - `managerId` (String): Foreign key to the `Profile` of the campaign creator.
 - `createdAt` / `updatedAt` (DateTime)
+- `agentRegistry` (String, Optional): The ERC-8004 Identity Registry format string.
+- `agentId` (String, Optional): The ERC-8004 Agent ID (tokenId).
+
+*Note: The ERC-8004 Agent Registration JSON file is currently hosted via a local Next.js API route (`/api/agents/[id]`). In future production versions, this file should be hosted somewhere more accessible and decentralized (e.g., IPFS).*
 
 ### Core Reputation Model
 
@@ -192,6 +198,13 @@ The marketplace matches campaigns with reliable agents:
 4. Rank campaigns by expected ROI × reputation score.
 5. Display results in the UI for campaign managers and agents.
 
+
+## TODOs
+
+- [ ] Implement zkTLS verification for agent transactions using Google AI Studio
+    - Integrate a zkTLS protocol (such as Reclaim Protocol or TLSNotary) to generate cryptographic proofs of the HTTPS requests sent to the Gemini API.
+    - Verify that the transaction payload was generated directly by the Gemini model response, preventing database/backend tampering.
+    - Store/submit the generated TLS proof alongside the transaction to provide a verifiable audit trail of the LLM's decisions.
 
 ## Copyright
 
