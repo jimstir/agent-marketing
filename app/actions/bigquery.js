@@ -49,6 +49,7 @@ export async function fetchAgentValidationsFromBigQuery(registryAddress, agentId
         \`bigquery-public-data.crypto_ethereum.logs\`
       WHERE
         address = LOWER(@registryAddress)
+        AND DATE(block_timestamp) >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
         AND topics[SAFE_OFFSET(0)] = @validationTopicHash
         -- topic 1 is usually the indexed agentId (padded to 32 bytes)
         AND topics[SAFE_OFFSET(1)] = @agentIdHexPadded
@@ -110,6 +111,7 @@ export async function verifyAgentOwnershipFromBigQuery(registryAddress, ownerAdd
         \`bigquery-public-data.crypto_ethereum.logs\`
       WHERE
         address = LOWER(@registryAddress)
+        AND DATE(block_timestamp) >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
         AND topics[SAFE_OFFSET(0)] = @registeredTopicHash
         -- topic 2 is the indexed owner address padded to 32 bytes
         AND topics[SAFE_OFFSET(2)] = @ownerAddressHexPadded
@@ -175,8 +177,8 @@ export async function syncCampaignReputation(campaignId) {
           COUNT(DISTINCT topics[SAFE_OFFSET(2)]) as unique_counterparties
         FROM \`bigquery-public-data.crypto_ethereum.logs\`
         WHERE address = LOWER(@registryAddress)
+          AND DATE(block_timestamp) >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
           AND topics[SAFE_OFFSET(1)] = @agentIdHexPadded
-          AND block_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 90 DAY)
       `;
       const [job] = await bigquery.createQueryJob({ 
         query, 
@@ -241,8 +243,8 @@ export async function syncAffiliateReputation(affiliateId) {
           (SUM(CAST(data AS INT64)) / NULLIF(COUNT(*), 0)) as success_rate
         FROM \`bigquery-public-data.crypto_ethereum.logs\`
         WHERE address = LOWER(@registryAddress)
+          AND DATE(block_timestamp) >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
           AND topics[SAFE_OFFSET(1)] = @agentIdHexPadded
-          AND block_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 90 DAY)
       `;
       const [job] = await bigquery.createQueryJob({ 
         query, 

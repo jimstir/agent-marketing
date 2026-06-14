@@ -68,9 +68,9 @@ export default function DashboardNotifications() {
                   🔗 View ETH Registration TX
                 </a>
               )}
-              {notif.arcTxHash && (
-                <a href={`https://explorer.testnet.arc.network/tx/${notif.arcTxHash}`} target="_blank" rel="noopener noreferrer" style={{ color: '#00D1B2', textDecoration: 'none' }}>
-                  🔗 View Arc Funding TX
+              {notif.fundTxHash && (
+                <a href={`https://etherscan.io/tx/${notif.fundTxHash}`} target="_blank" rel="noopener noreferrer" style={{ color: '#00D1B2', textDecoration: 'none' }}>
+                  🔗 View Funding TX
                 </a>
               )}
             </div>

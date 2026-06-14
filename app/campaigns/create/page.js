@@ -5,13 +5,7 @@ import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { createWalletClient, custom, parseAbi, publicActions, parseEther } from "viem";
 import { mainnet } from "viem/chains";
 
-const arcTestnet = {
-  id: 5042002,
-  name: 'Arc Testnet',
-  network: 'arc-testnet',
-  nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
-  rpcUrls: { default: { http: ['https://rpc.testnet.arc.network'] }, public: { http: ['https://rpc.testnet.arc.network'] } },
-};
+
 import { createCampaign, updateCampaignAgent, getOrCreateProfile, initAgentAuthorization, finalizeAgentAuthorization, getAllCampaignsForSelect } from "../../actions/campaigns";
 import { createAffiliate } from "../../actions/affiliates";
 import { verifyAgentOwnershipFromBigQuery } from "../../actions/bigquery";
@@ -207,25 +201,18 @@ export default function Home() {
       // 7. Update the campaign with the new ERC-8004 identity
       await updateCampaignAgent(campaignId, agentRegistry, agentId);
 
-      // 8. Switch to Arc Testnet and Fund Agent
-      let arcTxHash = null;
+      // 8. Fund Agent on Ethereum Mainnet
+      let fundTxHash = null;
       const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
       if (!embeddedWallet) {
         console.warn("Could not find agent's embedded wallet. Skipping funding step.");
       } else {
-        await wallet.switchChain(arcTestnet.id);
-        const arcClient = createWalletClient({
-          account: wallet.address,
-          chain: arcTestnet,
-          transport: custom(provider)
-        }).extend(publicActions);
-
-        arcTxHash = await arcClient.sendTransaction({
+        fundTxHash = await client.sendTransaction({
           to: embeddedWallet.address,
           value: parseEther(formData.rewardAmount.toString() || "0")
         });
         
-        await arcClient.waitForTransactionReceipt({ hash: arcTxHash });
+        await client.waitForTransactionReceipt({ hash: fundTxHash });
       }
 
       // 9. Create Transaction Notification
@@ -235,7 +222,7 @@ export default function Home() {
         type: 'DEPLOYMENT',
         message: `Campaign '${formData.name}' deployed! Agent Identity: ${agentRegistry} - ID: ${agentId}`,
         ethTxHash: hash,
-        arcTxHash: arcTxHash
+        fundTxHash: fundTxHash
       });
 
       // 10. Generate LLM Challenge

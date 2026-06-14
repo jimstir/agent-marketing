@@ -61,7 +61,7 @@ Tracks payment behavior.
 - `payment_type` (STRING): click / api_call / task / subscription
 - `success` (BOOL): settlement success
 - `latency_ms` (INT64): settlement time
-- `source` (STRING): arc / ethereum / offchain bridge
+- `source` (STRING): ethereum / offchain bridge
 
 #### C. agent_identity_registry
 Maps ERC-8004 identities to canonical agents.

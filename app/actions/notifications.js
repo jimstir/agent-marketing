@@ -7,7 +7,7 @@ import { prisma } from "../../lib/prisma";
  */
 export async function createNotification(data) {
   try {
-    const { profileId, type, message, campaignId, ethTxHash, arcTxHash } = data;
+    const { profileId, type, message, campaignId, ethTxHash, fundTxHash } = data;
     
     const notification = await prisma.transactionNotification.create({
       data: {
@@ -16,7 +16,7 @@ export async function createNotification(data) {
         message,
         campaignId,
         ethTxHash,
-        arcTxHash
+        fundTxHash
       }
     });
     

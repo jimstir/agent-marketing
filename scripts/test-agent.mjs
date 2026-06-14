@@ -82,7 +82,7 @@ async function main() {
   const decryptedKey = await recipient.open(ciphertext);
   const signature = Buffer.from(decryptedKey).toString("base64");
 
-  console.log("5. Sending 0 USDC transaction on Arc Testnet...");
+  console.log("5. Sending 0 ETH transaction on Ethereum Mainnet...");
   const rpcRes = await fetch(`https://auth.privy.io/api/oauth/v2/wallets/${wallet.id}/rpc`, {
     method: "POST",
     headers: {
@@ -98,7 +98,7 @@ async function main() {
         transaction: {
           to: wallet.address, // Send to self
           value: "0x0",
-          chain_id: 5042002
+          chain_id: 1
         }
       }
     })
@@ -107,7 +107,7 @@ async function main() {
   if (!rpcRes.ok) throw new Error("Transaction failed: " + await rpcRes.text());
   const rpcData = await rpcRes.json();
   console.log("Transaction Result:", rpcData);
-  console.log(`Success! Sent test transaction on Arc Testnet. TX Hash: ${rpcData.data?.hash}`);
+  console.log(`Success! Sent test transaction on Ethereum Mainnet. TX Hash: ${rpcData.data?.hash}`);
 }
 
 main().catch(console.error);

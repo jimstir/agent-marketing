@@ -114,7 +114,7 @@ model TransactionNotification {
   type        String
   message     String
   ethTxHash   String?
-  arcTxHash   String?
+  fundTxHash  String?
   createdAt   DateTime @default(now())
 }
 
