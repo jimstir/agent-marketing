@@ -12,6 +12,7 @@ model Profile {
   campaigns     Campaign[]
   affiliate     Affiliate?
   notifications TransactionNotification[]
+  submissions   ParticipantSubmission[]
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 }

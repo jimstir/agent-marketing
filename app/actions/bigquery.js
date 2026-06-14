@@ -2,6 +2,9 @@
 
 import { BigQuery } from '@google-cloud/bigquery';
 
+const ERC8004_IDENTITY_REGISTRY_MAINNET = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432";
+const ERC8004_REPUTATION_REGISTRY_MAINNET = "0x8004BAa17C55a88189AE136b182e5fdA19dE9b63";
+
 /**
  * Initializes the BigQuery client.
  * Requires GOOGLE_CLOUD_PROJECT_ID and GOOGLE_APPLICATION_CREDENTIALS to be set in .env.
@@ -161,12 +164,27 @@ export async function syncCampaignReputation(campaignId) {
 
     try {
       const bigquery = getBigQueryClient();
+      
+      const agentIdHex = BigInt(campaign.agentId || '0').toString(16);
+      const agentIdHexPadded = '0x' + agentIdHex.padStart(64, '0');
+
       const query = `
-        SELECT validation_score_sum, total_payments_sent, unique_counterparties
-        FROM \`bigquery-public-data.crypto_ethereum.agent_activity_summary\`
-        WHERE agent_address = @agentId LIMIT 1
+        SELECT 
+          SUM(CAST(data AS INT64)) as validation_score_sum, 
+          COUNT(*) as total_payments_sent, 
+          COUNT(DISTINCT topics[SAFE_OFFSET(2)]) as unique_counterparties
+        FROM \`bigquery-public-data.crypto_ethereum.logs\`
+        WHERE address = LOWER(@registryAddress)
+          AND topics[SAFE_OFFSET(1)] = @agentIdHexPadded
+          AND block_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 90 DAY)
       `;
-      const [job] = await bigquery.createQueryJob({ query, params: { agentId: campaign.agentId || '0' }});
+      const [job] = await bigquery.createQueryJob({ 
+        query, 
+        params: { 
+          registryAddress: ERC8004_IDENTITY_REGISTRY_MAINNET,
+          agentIdHexPadded 
+        }
+      });
       const [rows] = await job.getQueryResults();
       if (rows.length > 0) {
         campaign.validationScoreSum = rows[0].validation_score_sum || campaign.validationScoreSum;
@@ -214,12 +232,25 @@ export async function syncAffiliateReputation(affiliateId) {
 
     try {
       const bigquery = getBigQueryClient();
+
+      const agentIdHex = BigInt(affiliate.registryAddress || '0').toString(16);
+      const agentIdHexPadded = '0x' + agentIdHex.padStart(64, '0');
+
       const query = `
-        SELECT success_rate
-        FROM \`bigquery-public-data.crypto_ethereum.agent_activity_summary\`
-        WHERE agent_address = @agentId LIMIT 1
+        SELECT 
+          (SUM(CAST(data AS INT64)) / NULLIF(COUNT(*), 0)) as success_rate
+        FROM \`bigquery-public-data.crypto_ethereum.logs\`
+        WHERE address = LOWER(@registryAddress)
+          AND topics[SAFE_OFFSET(1)] = @agentIdHexPadded
+          AND block_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 90 DAY)
       `;
-      const [job] = await bigquery.createQueryJob({ query, params: { agentId: affiliate.registryAddress || '0' }});
+      const [job] = await bigquery.createQueryJob({ 
+        query, 
+        params: { 
+          registryAddress: ERC8004_IDENTITY_REGISTRY_MAINNET,
+          agentIdHexPadded 
+        }
+      });
       const [rows] = await job.getQueryResults();
       // Mock metrics update for affiliates based on BQ
       if (rows.length > 0) {

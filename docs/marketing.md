@@ -72,18 +72,11 @@ Maps ERC-8004 identities to canonical agents.
 - `verified` (BOOL)
 - `x402_enabled` (BOOL)
 
-#### D. agent_activity_summary
-Pre-aggregated performance metrics.
-- `agent_address` (STRING)
-- `total_payments_received` (FLOAT64)
-- `total_payments_sent` (FLOAT64)
-- `success_rate` (FLOAT64)
-- `avg_payment_value` (FLOAT64)
-- `validation_score_sum` (FLOAT64)
-- `validation_count` (INT64)
-- `dispute_count` (INT64)
-- `active_days_30d` (INT64)
-- `unique_counterparties` (INT64)
+#### D. Dynamic Aggregations (Logs)
+To comply with BigQuery free-tier limits, pre-aggregated tables like `agent_activity_summary` are NOT used. Instead, metrics MUST be aggregated dynamically directly from the raw `bigquery-public-data.crypto_ethereum.logs` table.
+- Queries MUST strictly filter by the Ethereum mainnet ERC8004 `IdentityRegistry` address (`0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`).
+- Queries MUST use `topics` to filter for the specific `agentId`.
+- Queries MUST implement strict time boundaries (e.g., 90 days) to prevent full-table scans.
 
 ### Application Data Schema (Prisma/PostgreSQL)
 
@@ -111,7 +104,7 @@ Each profile is identified by the user's connected wallet address.
 - `walletPolicies` (String, Optional): JSON or text string containing Privy Agent Wallet restrictions.
 - `managerId` (String): Foreign key to the `Profile` of the campaign creator.
 - `createdAt` / `updatedAt` (DateTime)
-- `agentRegistry` (String, Optional): The ERC-8004 Identity Registry format string.
+- `agentRegistry` (String, Optional): The ERC-8004 Identity Registry. Note: For analytics, all queries enforce the Ethereum mainnet IdentityRegistry address (`0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`).
 - `agentId` (String, Optional): The ERC-8004 Agent ID (tokenId).
 
 *Note: The ERC-8004 Agent Registration JSON file is currently hosted via a local Next.js API route (`/api/agents/[id]`). In future production versions, this file should be hosted somewhere more accessible and decentralized (e.g., IPFS).*
@@ -132,7 +125,7 @@ The affiliate agent reputation MUST consist of Traffic Reliability Score, Traffi
 
 ### BigQuery Synchronization & Fallback
 
-The application MUST synchronize ARS metrics (such as validation scores and aggregated performance) directly from Google BigQuery (`raw_erc8004_events` and `agent_activity_summary`). 
+The application MUST synchronize ARS metrics (such as validation scores and aggregated performance) directly from Google BigQuery, specifically querying the `bigquery-public-data.crypto_ethereum.logs` table for raw events. 
 - **Caching:** To prevent excessive queries, these scores MUST be cached locally and only refreshed every 24 hours.
 - **Graceful Fallback:** If the required BigQuery tables are not yet initialized or populated, the synchronization engine MUST gracefully catch the "Table Not Found" error and fallback to utilizing the metrics currently stored in the local PostgreSQL database without breaking the user experience.
 

@@ -138,7 +138,8 @@ export default function TopBar() {
         </Link>
       </div>
       <nav className="nav-links">
-        <Link href="/" className="nav-link">Create Campaign</Link>
+        <Link href="/" className="nav-link">Home</Link>
+        <Link href="/campaigns/create" className="nav-link">Create Campaign</Link>
         <Link href="/dashboard" className="nav-link">Dashboard</Link>
       </nav>
       {hasPrivy ? <PrivyTopBar /> : <UnconfiguredTopBar />}
